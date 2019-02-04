@@ -232,36 +232,36 @@ regions = read_regions()
 
 regions = convert_multishapes_to_single_shapes(regions)
 
-geometry = []
-for region in regions:
-    geometry = region['geometry']['coordinates']
-    print('id is {} and len is {}'.format(region['properties']['id'], len(geometry)))
-    #for geom in geometry:
+# geometry = []
+# for region in regions:
+#     geometry = region['geometry']['coordinates']
+#     print('id is {} and len is {}'.format(region['properties']['id'], len(geometry)))
+#     #for geom in geometry:
 
-#print(regions[1])
-write_shapefile(regions, os.path.join(DATA_RAW_OUTPUTS, 'test_outputs'), 'convert_multipolygons')
+# #print(regions[1])
+# write_shapefile(regions, os.path.join(DATA_RAW_OUTPUTS, 'test_outputs'), 'convert_multipolygons')
 
-# lad_list = get_lad_list(lads)
+lad_list = get_lad_list(lads)
 
-# pathlist = glob.iglob(os.path.join(DATA_RAW_INPUTS, 'layer_5_premises') + '/*.csv', recursive=True)
+pathlist = glob.iglob(os.path.join(DATA_RAW_INPUTS, 'layer_5_premises') + '/*.csv', recursive=True)
 
-# pathlist = []
-# pathlist.append(os.path.join(DATA_RAW_INPUTS, 'layer_5_premises', 'blds_with_functions_en_E12000006.csv'))
+pathlist = []
+pathlist.append(os.path.join(DATA_RAW_INPUTS, 'layer_5_premises', 'blds_with_functions_en_E12000006.csv'))
 
-# for path in pathlist:
+for path in pathlist:
 
-#     file_name = path.split("premises\\", 1)[1]
+    file_name = path.split("premises\\", 1)[1]
 
-#     print('reading prem data for {}'.format(file_name))
-#     premises = read_premises_data(path, file_name)
+    print('reading prem data for {}'.format(file_name))
+    premises = read_premises_data(path, file_name)
 
-#     print('adding lad to premises for {}'.format(file_name))
-#     premises = add_lad_to_premises(premises, lads)
+    print('adding lad to premises for {}'.format(file_name))
+    premises = add_lad_to_premises(premises, lads)
 
-#     print('writing premises data for {}'.format(file_name))
-#     write_final_output(premises, lads)
+    print('writing premises data for {}'.format(file_name))
+    write_final_output(premises, lads)
 
-#     gc.collect()
+    gc.collect()
 
 print('script completed')
 
