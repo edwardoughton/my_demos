@@ -245,8 +245,8 @@ write_shapefile(regions, os.path.join(DATA_RAW_OUTPUTS, 'test_outputs'), 'conver
 
 # pathlist = glob.iglob(os.path.join(DATA_RAW_INPUTS, 'layer_5_premises') + '/*.csv', recursive=True)
 
-# # pathlist = []
-# # pathlist.append(os.path.join(DATA_RAW_INPUTS, 'layer_5_premises', 'blds_with_functions_en_E12000006.csv'))
+# pathlist = []
+# pathlist.append(os.path.join(DATA_RAW_INPUTS, 'layer_5_premises', 'blds_with_functions_en_E12000006.csv'))
 
 # for path in pathlist:
 
