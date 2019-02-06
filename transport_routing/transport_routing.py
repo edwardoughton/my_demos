@@ -3,7 +3,8 @@ import configparser
 import fiona
 import osmnx as ox
 import networkx as nx
-from shapely.geometry import shape, Polygon 
+from shapely.geometry import shape, Polygon, mapping 
+from shapely.ops import split
 from collections import OrderedDict
 from rtree import index
 from pyproj import Proj, transform
@@ -135,31 +136,6 @@ def find_line_length(data):
 
     return output
 
-def write_shapefile(data, crs, filename):
-    print(data[0]['properties'].items())
-    # Translate props to Fiona sink schema
-    prop_schema = []
-    for name, value in data[0]['properties'].items():
-        fiona_prop_type = next((fiona_type for fiona_type, python_type in fiona.FIELD_TYPES_MAP.items() if python_type == type(value)), None)
-        prop_schema.append((name, fiona_prop_type))
-
-    sink_driver = 'ESRI Shapefile'
-    sink_crs = {'init': crs}
-    sink_schema = {
-        'geometry': data[0]['geometry']['type'],
-        'properties': OrderedDict(prop_schema)
-    }
-
-    # Create path
-    directory = os.path.join(DATA_OUTPUTS)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    print(os.path.join(directory, filename))
-    # Write all elements to output file
-    with fiona.open(os.path.join(directory, filename), 'w', driver=sink_driver, crs=sink_crs, schema=sink_schema) as sink:
-        [sink.write(feature) for feature in data]
-
 def route_generation(flows):
 
     results = []
@@ -194,6 +170,31 @@ def route_generation(flows):
 
     return results
 
+def cut_routes_by_area(routes, areas):
+
+    cut_routes = []
+
+    # Initialze Rtree
+    idx = index.Index()
+    [idx.insert(0, shape(route['geometry']).bounds, route) for route in routes]
+
+    for area in areas:
+        for n in idx.intersection((shape(area['geometry']).bounds), objects=True):
+            area_shape = shape(area['geometry'])
+            route_shape = shape(n.object['geometry'])
+            split_routes = split(route_shape, area_shape)
+            print(len(split_routes))
+            for route in split_routes:
+                if area_shape.contains(route):             
+                    cut_routes.append({
+                        'type': n.object['type'],
+                        'geometry': mapping(route), 
+                        'properties': n.object['properties']
+                        })
+
+    print('cut_routes is {} long'.format(len(cut_routes)))
+    return cut_routes
+
 def intersect_routes_with_shapes(routes, areas):
 
     joined_routes_and_areas = []
@@ -214,6 +215,39 @@ def intersect_routes_with_shapes(routes, areas):
                 joined_routes_and_areas.append(n.object)
 
     return joined_routes_and_areas
+
+####################
+#### WRITE OUT FILES
+####################
+
+def write_shapefile(data, crs, filename):
+    print(data[0]['properties'].items())
+    # Translate props to Fiona sink schema
+    prop_schema = []
+    for name, value in data[0]['properties'].items():
+        fiona_prop_type = next((fiona_type for fiona_type, python_type in fiona.FIELD_TYPES_MAP.items() if python_type == type(value)), None)
+        prop_schema.append((name, fiona_prop_type))
+
+    sink_driver = 'ESRI Shapefile'
+    sink_crs = {'init': crs}
+    sink_schema = {
+        'geometry': data[0]['geometry']['type'],
+        'properties': OrderedDict(prop_schema)
+    }
+
+    # Create path
+    directory = os.path.join(DATA_OUTPUTS)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    print(os.path.join(directory, filename))
+    # Write all elements to output file
+    with fiona.open(os.path.join(directory, filename), 'w', driver=sink_driver, crs=sink_crs, schema=sink_schema) as sink:
+        [sink.write(feature) for feature in data]
+
+####################
+#### TEST DATA
+####################
 
 flows = [
     {
@@ -250,8 +284,10 @@ routes = change_crs(routes, projWGS84, projOSGB1936)
 #add the length and density property to each route
 routes = find_line_length(routes)
 
-#inersect routes with areas
-output = intersect_routes_with_shapes(routes, area_shapes)
+routes = cut_routes_by_area(routes, area_shapes)
+
+# #inersect routes with areas
+# output = intersect_routes_with_shapes(routes, area_shapes)
 
 #write shapes
 write_shapefile(routes, 'epsg:27700', 'routing.shp')
