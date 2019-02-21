@@ -172,7 +172,7 @@ def route_generation(flows):
 
 def cut_routes_by_area(routes, areas):
     
-    cut_routes = []
+    output = []
 
     # Initialze Rtree
     idx = index.Index()
@@ -183,16 +183,17 @@ def cut_routes_by_area(routes, areas):
             area_shape = shape(area['geometry'])
             route_shape = shape(n.object['geometry'])
             split_routes = split(route_shape, area_shape)
+            cut_routes = []
             for route in split_routes:
                 if area_shape.contains(route):             
-                    cut_routes.append({
+                    output.append({
                         'type': n.object['type'],
                         'geometry': mapping(route), 
                         'properties': n.object['properties']
                         })
 
-    print('cut_routes is {} long'.format(len(cut_routes)))
-    return cut_routes
+    print('cut_routes is {} long'.format(len(output)))
+    return output
 
 def intersect_routes_with_shapes(routes, areas):
 
