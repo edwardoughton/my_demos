@@ -31,7 +31,6 @@ def get_list_of_files(path):
     """
     return glob.iglob(path + '/*.csv', recursive=True)
 
-
 def move_oa_files_into_lad_folders(oa_to_lad_luts):
     
     #import each lut at the lad level
@@ -96,19 +95,67 @@ def convert_to_directory_paths(directory, data):
 
     return output
 
+def rename_2011_lad_folders_to_2016(missing_lads):
+
+    dirlist  = os.listdir(DATA_OUTPUT)
+
+    for directory in dirlist:
+        if directory == 'E07000097':                      
+            try:
+                os.rename(os.path.join(DATA_OUTPUT,'E07000097'), os.path.join(DATA_OUTPUT,'E07000242'))
+            except:
+                print('directory already exists')
+        if directory == 'E06000048':                      
+            try: 
+                os.rename(os.path.join(DATA_OUTPUT,'E06000048'), os.path.join(DATA_OUTPUT,'E06000057'))
+            except:
+                print('directory already exists')
+        if directory == 'E41000052':                      
+            try:
+                os.rename(os.path.join(DATA_OUTPUT,'E41000052'), os.path.join(DATA_OUTPUT,'E06000052'))
+            except:
+                print('directory already exists')
+        if directory == 'E08000020':                      
+            try:
+                os.rename(os.path.join(DATA_OUTPUT,'E08000020'), os.path.join(DATA_OUTPUT,'E08000037'))
+            except:
+                print('directory already exists')
+        if directory == 'E07000101':                      
+            try:
+                os.rename(os.path.join(DATA_OUTPUT,'E07000101'), os.path.join(DATA_OUTPUT,'E07000242'))
+            except:
+                print('directory already exists')
+        if directory == 'E07000104':                      
+            try:
+                os.rename(os.path.join(DATA_OUTPUT,'E07000104'), os.path.join(DATA_OUTPUT,'E07000241'))
+            except:
+                print('directory already exists')
+        if directory == 'E07000100':                      
+            try:
+                os.rename(os.path.join(DATA_OUTPUT,'E07000100'), os.path.join(DATA_OUTPUT,'E07000240'))
+            except:
+                print('directory already exists')
+                
+    return print('renaming complete')
+
+
+#################################################################
+
 if __name__ == "__main__":
 
-    oa_to_lad_luts = get_list_of_files(DATA_LUTS)
+    # oa_to_lad_luts = get_list_of_files(DATA_LUTS)
     
-    move_oa_files_into_lad_folders(oa_to_lad_luts)
+    # move_oa_files_into_lad_folders(oa_to_lad_luts)
 
-    missing_lads = find_non_matching_oa_to_lads()
+    # missing_lads = find_non_matching_oa_to_lads()
 
     missing_lads = ['E07000097', 'E06000048', 'E41000052', 'E08000020', 'E07000101', 'E07000104', 'E41000324', 'E07000100']
     
-    missing_paths = convert_to_directory_paths(DATA_LUTS, missing_lads)
+    # missing_paths = convert_to_directory_paths(DATA_LUTS, missing_lads)
 
-    move_oa_files_into_lad_folders(missing_paths)
+    # move_oa_files_into_lad_folders(missing_paths)
+
+    rename_2011_lad_folders_to_2016(missing_lads)
 
     print('complete')
 
