@@ -52,6 +52,41 @@ for lut in oa_to_lad_luts:
         else:
             pass
 
+##########################################################################
+# DEGBUG MISSING LADS
+##########################################################################
+
+def find_non_matching_oa_to_lads():
+    """Some OAs were left in DATA_OUTPUT_AREAS. 
+    There seem to be some issues with the LAD codes.
+    This function finds the LAD costs for remaining OAs, and prints them
+    """
+
+    lad_codes = []
+
+    pathlist = glob.iglob(DATA_OUTPUT_AREAS + '/*.csv', recursive=True)
+
+    for path in pathlist:
+         with open(path, 'r') as system_file:
+            reader = csv.reader(system_file)
+            for line in reader:
+                lad_codes.append(line[12])
+
+    unique_lad_codes = list(set(lad_codes))
+
+    final_lad_codes = []
+
+    for lad in unique_lad_codes:
+        PATH = os.path.join(DATA_OUTPUT, lad)
+        if os.path.exists(PATH):
+            print('{} has lad data'.format(lad))
+        else:
+            final_lad_codes.append(lad)        
+
+    return final_lad_codes
+
+# lads = find_non_matching_oa_to_lads()
+# print(lads)
 
 
 
