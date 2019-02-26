@@ -32,25 +32,26 @@ def get_list_of_files(path):
     return glob.iglob(path + '/*.csv', recursive=True)
 
 
-#oa_to_lad_luts = [os.path.join(DATA_LUTS, 'E06000001.csv')]
-oa_to_lad_luts = get_list_of_files(DATA_LUTS)
+def move_oa_files_into_lad_folders(oa_to_lad_luts):
+    
+    #import each lut at the lad level
+    for lut in oa_to_lad_luts:
+        
+        #create output folder if it doesn't already exist
+        new_directory = os.path.join(DATA_OUTPUT, os.path.basename(lut)[:-4])
+        if not os.path.exists(new_directory):
+            os.makedirs(new_directory)
+        
+        #import
+        for oa in import_luts(lut):
+            existing_path = os.path.join(DATA_OUTPUT_AREAS, oa + '.csv')
+            if os.path.exists(existing_path):
+                # find and move oa file into folder
+                shutil.move(existing_path, new_directory)
+            else:
+                pass
 
-#import each lut at the lad level
-for lut in oa_to_lad_luts:
-    
-    #create output folder if it doesn't already exist
-    new_directory = os.path.join(DATA_OUTPUT, os.path.basename(lut)[:-4])
-    if not os.path.exists(new_directory):
-        os.makedirs(new_directory)
-    
-    #import
-    for oa in import_luts(lut):
-        existing_path = os.path.join(DATA_OUTPUT_AREAS, oa + '.csv')
-        if os.path.exists(existing_path):
-            # find and move oa file into folder
-            shutil.move(existing_path, new_directory)
-        else:
-            pass
+    return print('completed')
 
 ##########################################################################
 # DEGBUG MISSING LADS
@@ -85,11 +86,30 @@ def find_non_matching_oa_to_lads():
 
     return final_lad_codes
 
-# lads = find_non_matching_oa_to_lads()
-# print(lads)
+def convert_to_directory_paths(directory, data):
 
+    output = []
 
+    for datum in data:
+        PATH = os.path.join(directory, datum + '.csv')
+        output.append(PATH)
 
+    return output
 
+if __name__ == "__main__":
+
+    oa_to_lad_luts = get_list_of_files(DATA_LUTS)
+    
+    move_oa_files_into_lad_folders(oa_to_lad_luts)
+
+    missing_lads = find_non_matching_oa_to_lads()
+
+    missing_lads = ['E07000097', 'E06000048', 'E41000052', 'E08000020', 'E07000101', 'E07000104', 'E41000324', 'E07000100']
+    
+    missing_paths = convert_to_directory_paths(DATA_LUTS, missing_lads)
+
+    move_oa_files_into_lad_folders(missing_paths)
+
+    print('complete')
 
 
