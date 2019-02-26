@@ -57,19 +57,53 @@ lads = get_lads()
 
 lad_ids = get_lad_ids(lads)
 
-#run loop
-for area_id in lad_ids:
+def initial_tranche_of_lads():
+    #run loop
+    for area_id in lad_ids:
 
-    first_part = 'http://www.nismod.ac.uk/api/data/boundaries/oas_in_lad?lad_codes='
+        first_part = 'http://www.nismod.ac.uk/api/data/boundaries/oas_in_lad?lad_codes='
 
-    full_address = first_part + area_id
+        full_address = first_part + area_id
 
-    response = requests.get(full_address, auth=('neo4936','f67eRT2##i7HyH'))
+        response = requests.get(full_address, auth=('neo4936','f67eRT2##i7HyH'))
 
-    data = json.loads(response.text)
+        data = json.loads(response.text)
 
-    if len(data) >0:
-        csv_writer(data, '{}.csv'.format(area_id))
-    else:
-        print('{} did not contain data'.format(area_id))
-        pass
+        if len(data) >0:
+            csv_writer(data, '{}.csv'.format(area_id))
+        else:
+            print('{} did not contain data'.format(area_id))
+            pass
+
+    return print('initial tranche complete')
+
+
+def try_get_missing_lads(missing_lads):
+
+    for lad in missing_lads:
+
+        first_part = 'http://www.nismod.ac.uk/api/data/boundaries/oas_in_lad?lad_codes='
+
+        full_address = first_part + lad
+
+        response = requests.get(full_address, auth=('neo4936','f67eRT2##i7HyH'))
+
+        data = json.loads(response.text)
+
+        if len(data) >0:
+            csv_writer(data, '{}.csv'.format(lad))
+        else:
+            print('{} did not contain data'.format(lad))
+            pass
+    
+    return print('second attempt complete')
+
+#############################################################
+
+if __name__ == "__main__":
+
+    #initial_tranche_of_lads()
+
+    missing_lads = ['E07000097', 'E06000048', 'E41000052', 'E08000020', 'E07000101', 'E07000104', 'E41000324', 'E07000100']
+
+    try_get_missing_lads(missing_lads)
