@@ -16,7 +16,7 @@ DATA_RAW_OUTPUTS = os.path.join(BASE_PATH, 'prems_by_oa')
 def get_oa_id_list():
 
     area_list = []
-    
+
     pathlist = glob.iglob(os.path.join(DATA_RAW_INPUTS, 'oa_lut') + '/*.csv', recursive=True)
 
     for path in pathlist:
@@ -50,11 +50,14 @@ def csv_writer(data, filename):
        writer.writerows(data)
 
 area_ids = get_oa_id_list()
-area_ids.reverse()
+#area_ids.reverse()
+
+first_part = (
+    'https://www.nismod.ac.uk/api/data/mastermap/buildings?scale=oa&building_year=2017&area_codes='
+)
+
 #run loop
 for area_id in area_ids:
-
-    first_part = 'https://www.nismod.ac.uk/api/data/mastermap/buildings?scale=oa&building_year=2017&area_codes='
 
     full_address = first_part + area_id
 
