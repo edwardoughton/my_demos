@@ -17,12 +17,13 @@ def get_oa_id_list():
 
     area_list = []
 
-    pathlist = glob.iglob(os.path.join(DATA_RAW_INPUTS, 'oa_lut') + '/*.csv', recursive=True)
+    pathlist = glob.iglob(
+        os.path.join(DATA_RAW_INPUTS, 'oa_to_lad_luts') + '/*.csv', recursive=True
+        )
 
     for path in pathlist:
         with open(path, 'r') as system_file:
             reader = csv.reader(system_file)
-            next(reader, None)
             for line in reader:
                 area_list.append(line[0])
 
@@ -59,14 +60,19 @@ first_part = (
 #run loop
 for area_id in area_ids:
 
-    full_address = first_part + area_id
+    directory = os.path.join(DATA_RAW_OUTPUTS, area_id + '.csv')
+    if not os.path.exists(directory):
+        print('working on {}'.format(area_id))
+        full_address = first_part + area_id
 
-    response = requests.get(full_address, auth=('neo4936','f67eRT2##i7HyH'))
+        response = requests.get(full_address, auth=('neo4936','f67eRT2##i7HyH'))
 
-    data = json.loads(response.text)
+        data = json.loads(response.text)
 
-    if len(data) >0:
-        csv_writer(data, '{}.csv'.format(area_id))
+        if len(data) >0:
+            csv_writer(data, '{}.csv'.format(area_id))
+        else:
+            print('{} did not contain data'.format(area_id))
+            pass
     else:
-        print('{} did not contain data'.format(area_id))
-        pass
+        continue

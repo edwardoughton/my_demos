@@ -167,7 +167,10 @@ if __name__ == "__main__":
 
     missing_lads = find_non_matching_oa_to_lads()
 
-    missing_lads = ['E07000097', 'E06000048', 'E41000052', 'E08000020', 'E07000101', 'E07000104', 'E41000324', 'E07000100']
+    missing_lads = [
+        'E07000097', 'E06000048', 'E41000052', 'E08000020',
+        'E07000101', 'E07000104', 'E41000324', 'E07000100'
+        ]
 
     missing_paths = convert_to_directory_paths(DATA_LUTS, missing_lads)
 

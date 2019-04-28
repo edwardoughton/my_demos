@@ -31,7 +31,6 @@ def get_lad_ids(data):
 
     return lad_ids
 
-
 #write csv
 def csv_writer(data, filename):
    """
@@ -61,7 +60,7 @@ lad_ids = get_lad_ids(lads)
 def get_output_areas_by_lad(lad_ids):
     #run loop
     for area_id in lad_ids:
-
+        print('working on {}'.format(area_id))
         first_part = 'http://www.nismod.ac.uk/api/data/boundaries/oas_in_lad?lad_codes='
 
         full_address = first_part + area_id
