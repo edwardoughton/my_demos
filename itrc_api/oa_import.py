@@ -59,20 +59,22 @@ first_part = (
 
 #run loop
 for area_id in area_ids:
+    if area_id.startswith('E'):
+        directory = os.path.join(DATA_RAW_OUTPUTS, area_id + '.csv')
+        if not os.path.exists(directory):
+            print('working on {}'.format(area_id))
+            full_address = first_part + area_id
 
-    directory = os.path.join(DATA_RAW_OUTPUTS, area_id + '.csv')
-    if not os.path.exists(directory):
-        print('working on {}'.format(area_id))
-        full_address = first_part + area_id
+            response = requests.get(full_address, auth=('neo4936','f67eRT2##i7HyH'))
 
-        response = requests.get(full_address, auth=('neo4936','f67eRT2##i7HyH'))
+            data = json.loads(response.text)
 
-        data = json.loads(response.text)
-
-        if len(data) >0:
-            csv_writer(data, '{}.csv'.format(area_id))
+            if len(data) >0:
+                csv_writer(data, '{}.csv'.format(area_id))
+            else:
+                print('{} did not contain data'.format(area_id))
+                pass
         else:
-            print('{} did not contain data'.format(area_id))
-            pass
+            continue
     else:
         continue

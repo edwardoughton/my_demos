@@ -9,7 +9,7 @@ CONFIG = configparser.ConfigParser()
 CONFIG.read(os.path.join(os.path.dirname(__file__), 'script_config.ini'))
 BASE_PATH = CONFIG['file_locations']['base_path']
 
-DATA_OUTPUT_AREAS = os.path.join(BASE_PATH, 'prems_by_oa')
+DATA_PREMS_BY_OA = os.path.join(BASE_PATH, 'prems_by_oa')
 DATA_LUTS = os.path.join(BASE_PATH, 'oa_to_lad_luts')
 DATA_OUTPUT = os.path.join(BASE_PATH, 'prems_by_lad')
 
@@ -44,7 +44,7 @@ def move_oa_files_into_lad_folders(oa_to_lad_luts):
 
         #import
         for oa in import_luts(lut):
-            existing_path = os.path.join(DATA_OUTPUT_AREAS, oa + '.csv')
+            existing_path = os.path.join(DATA_PREMS_BY_OA, oa + '.csv')
             if os.path.exists(existing_path):
                 #if rewriting over existing defective file, delete file first
                 if os.path.exists(new_directory):
@@ -63,20 +63,20 @@ def move_oa_files_into_lad_folders(oa_to_lad_luts):
 ##########################################################################
 
 def find_non_matching_oa_to_lads():
-    """Some OAs were left in DATA_OUTPUT_AREAS.
+    """Some OAs were left in DATA_PREMS_BY_OA.
     There seem to be some issues with the LAD codes.
     This function finds the LAD codes for remaining OAs, and prints them
-    """
 
+    """
     lad_codes = []
 
-    pathlist = glob.iglob(DATA_OUTPUT_AREAS + '/*.csv', recursive=True)
+    pathlist = glob.iglob(DATA_PREMS_BY_OA + '/*.csv', recursive=True)
 
     for path in pathlist:
          with open(path, 'r') as system_file:
-            reader = csv.reader(system_file)
+            reader = csv.DictReader(system_file)
             for line in reader:
-                lad_codes.append(line[12])
+                lad_codes.append(line['lad'])
 
     unique_lad_codes = list(set(lad_codes))
 
@@ -154,6 +154,28 @@ def rename_2011_lad_folders_to_2016(missing_lads):
 
     return print('renaming complete')
 
+def move_residuals():
+    """
+    Some OA data is being left in prems_by_oa. This function opens them, gets their LAD
+    and then moves them into the relevant folder in prems_by_lad.
+
+    """
+    DIRECTORY = os.path.join(DATA_PREMS_BY_OA)
+    PATHS = glob.iglob(DIRECTORY + '/*.csv', recursive=True)
+
+    #move residuals
+    for PATH in PATHS:
+        with open(PATH, 'r') as source:
+            reader = csv.DictReader(source)
+            first_row = next(reader)
+            my_list = dict(first_row)
+            lad = my_list['lad']
+        filename = os.path.basename(PATH)
+        new_path = os.path.join(DATA_OUTPUT, lad, filename)
+        shutil.move(PATH, new_path)
+        #os.remove(os.path.join(PATH))
+
+    return print('completed')
 
 #################################################################
 
@@ -167,15 +189,17 @@ if __name__ == "__main__":
 
     missing_lads = find_non_matching_oa_to_lads()
 
-    missing_lads = [
+    missing_lads.extend([
         'E07000097', 'E06000048', 'E41000052', 'E08000020',
         'E07000101', 'E07000104', 'E41000324', 'E07000100'
-        ]
+        ])
 
     missing_paths = convert_to_directory_paths(DATA_LUTS, missing_lads)
 
     move_oa_files_into_lad_folders(missing_paths)
 
     rename_2011_lad_folders_to_2016(missing_lads)
+
+    move_residuals()
 
     print('complete')

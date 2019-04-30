@@ -1,3 +1,7 @@
+"""
+This script downloads all output area information for each local authority district
+
+"""
 import requests
 import json
 import os, sys
@@ -16,7 +20,9 @@ DATA_RAW_OUTPUTS = os.path.join(BASE_PATH, 'oa_to_lad_luts')
 #lad_ids
 def get_lads():
 
-    pathlist = glob.iglob(os.path.join(DATA_RAW_INPUTS, 'lad_uk_2016-12') + '/*.shp', recursive=True)
+    pathlist = glob.iglob(
+        os.path.join(DATA_RAW_INPUTS, 'lad_uk_2016-12') + '/*.shp', recursive=True
+        )
 
     for path in pathlist:
         with fiona.open(path, 'r') as source:
