@@ -59,7 +59,7 @@ first_part = (
 
 #run loop
 for area_id in area_ids:
-    if area_id.startswith('E'):
+    if area_id.startswith('W'):
         directory = os.path.join(DATA_RAW_OUTPUTS, area_id + '.csv')
         if not os.path.exists(directory):
             print('working on {}'.format(area_id))
