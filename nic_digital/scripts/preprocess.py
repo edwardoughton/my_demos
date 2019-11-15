@@ -5,8 +5,10 @@ import csv
 import fiona
 import time
 
+import numpy as np
 from shapely.geometry import shape, Point, LineString, mapping
-from shapely.ops import  cascaded_union
+from shapely.ops import  cascaded_union, polygonize, split
+from scipy.spatial import Voronoi, voronoi_plot_2d
 
 from rtree import index
 
@@ -104,13 +106,13 @@ def lad_lut(lads):
         yield lad['properties']['id']
 
 
-def read_postcode_sectors(path):
+def read_shapes(path):
     """
     Read all postcode sector shapes.
 
     """
-    with fiona.open(path, 'r') as pcd_sector_shapes:
-        return [pcd for pcd in pcd_sector_shapes]
+    with fiona.open(path, 'r') as shapes:
+        return [shp for shp in shapes]
 
 
 def add_lad_to_postcode_sector(postcode_sectors, lads):
@@ -138,7 +140,7 @@ def add_lad_to_postcode_sector(postcode_sectors, lads):
                     'properties':{
                         'id': postcode_sector['properties']['RMSect'],
                         'lad': n.object['properties']['id'],
-                        'lad_population': n.object['properties']['population'],
+                        'lad_pop': n.object['properties']['population'],
                         'area': postcode_sector_shape.area,
                         },
                     })
@@ -207,7 +209,7 @@ def add_weights_to_postcode_sector(postcode_sectors, weights):
 
             weight = (
                     weight['domestic_delivery_points'] /
-                    postcode_sector['properties']['lad_population']
+                    postcode_sector['properties']['lad_pop']
                 )
 
             if pcd_id == weight_id:
@@ -217,14 +219,14 @@ def add_weights_to_postcode_sector(postcode_sectors, weights):
                     'properties': {
                         'id': pcd_id,
                         'lad': postcode_sector['properties']['lad'],
-                        'lad_population': postcode_sector['properties']['lad_population'],
+                        'lad_pop': postcode_sector['properties']['lad_pop'],
                         'weight': weight,
                         'population': round(
-                            postcode_sector['properties']['lad_population'] * weight
+                            postcode_sector['properties']['lad_pop'] * weight
                         ),
                         'area_km2': (postcode_sector['properties']['area'] / 1e6),
                         'pop_density_km2': round(
-                            (postcode_sector['properties']['lad_population'] * weight) /
+                            (postcode_sector['properties']['lad_pop'] * weight) /
                             (postcode_sector['properties']['area'] / 1e6)
                         )
                     }
@@ -413,6 +415,75 @@ def process_asset_data(data):
     return output
 
 
+def generate_perimeter(lads):
+
+    geoms = []
+
+    for lad in lads:
+        geoms.append(shape(lad['geometry']))
+
+    geom_union = list(cascaded_union(geoms))
+
+    boundary = []
+    for item in geom_union:
+        if item.area > 10000000:
+            boundary.append({
+                'type': 'Polygon',
+                'geometry': mapping(item),
+                'properties': {
+                    'id': 'perimeter'
+                    },
+                })
+
+    return boundary
+
+
+def generate_site_areas(processed_sites, perimeter):
+
+    points = []
+
+    for item in processed_sites:
+        points.append((item['geometry']['coordinates']))
+
+    vor = Voronoi(points)
+
+    lines = [
+        LineString(vor.vertices[line])
+        for line in vor.ridge_vertices
+        if -1 not in line
+    ]
+
+    site_areas = []
+
+    for poly in polygonize(lines):
+        for area in perimeter:
+            area_geom = shape(area['geometry'])
+            site_areas.append(split(poly.boundary, area_geom))
+
+    idx = index.Index(
+        (i, shape(site['geometry']).bounds, site)
+        for i, site in enumerate(site_areas)
+    )
+
+    output = []
+
+    for site in processed_sites:
+        for n in idx.intersection(
+            (shape(site['geometry']).bounds), objects=True):
+            site_point = shape(site['geometry'])
+            site_shape = shape(n.object['geometry'])
+            if site_point.intersects(site_shape):
+                output.append({
+                    'type': 'Feature',
+                    'geometry': n.object['geometry'],
+                    'properties':{
+                        'id': site['name'],
+                        }
+                    })
+
+    return site_areas
+
+
 def add_coverage_to_sites(sitefinder_data, postcode_sectors):
 
     final_sites = []
@@ -439,6 +510,35 @@ def add_coverage_to_sites(sitefinder_data, postcode_sectors):
                     })
 
     return final_sites
+
+
+def estimate_site_population(processed_sites, lads):
+
+    idx = index.Index(
+        (i, shape(lad['geometry']).bounds, lad)
+        for i, lad in enumerate(lads)
+        )
+
+    output = []
+
+    for site in processed_sites:
+        for n in idx.intersection((shape(site['geometry']).bounds), objects=True):
+            site_centroid = shape(site['geometry']).centroid
+            lad_shape = shape(n.object['geometry'])
+            if site_centroid.intersects(lad_shape):
+                area_weight = (shape(site['geometry']).area / lad_shape.area)
+                output.append({
+                    'type': site['type'],
+                    'geometry': site['geometry'],
+                    'properties':{
+                        'id': site['properties']['id'],
+                        'name':site['properties']['name'],
+                        'lte_4G': site['properties']['lte'],
+                        'population': n.object['properties']['population'] * area_weight
+                        },
+                    })
+
+    return output
 
 
 def read_exchanges():
@@ -561,26 +661,24 @@ def generate_link_straight_line(origin_points, dest_points):
 def estimate_exchange_population(exchanges, lads):
 
     idx = index.Index(
-        (i, Point(lad['geometry']['coordinates']).bounds, lad)
+        (i, shape(lad['geometry']).bounds, lad)
         for i, lad in enumerate(lads)
         )
 
     output = []
 
     for exchange in exchanges:
-        for n in idx.intersection(
-            (shape(exchange['geometry']).bounds), objects=True):
+        for n in idx.intersection((shape(exchange['geometry']).bounds), objects=True):
             exchange_centroid = shape(exchange['geometry']).centroid
-            # exchange_shape = shape(exchange['geometry'])
             lad_shape = shape(n.object['geometry'])
             if exchange_centroid.intersects(lad_shape):
+                area_weight = (shape(exchange['geometry']).area / lad_shape.area)
                 output.append({
                     'type': exchange['type'],
                     'geometry': exchange['geometry'],
                     'properties':{
-                        'exchange_id': exchange['exchange_id'],
-                        'exchange_name': exchange['exchange_name'],
-                        'id': exchange['id'],
+                        'id': exchange['properties']['id'],
+                        'population': n.object['properties']['population'] * area_weight
                         },
                     })
 
@@ -647,7 +745,7 @@ if __name__ == "__main__":
     print('Output directory will be {}'.format(directory))
 
     print('Loading local authority district shapes')
-    lads = read_lads()[:1]
+    lads = read_lads()#[:20]
 
     print('Loading lad population data')
     path = os.path.join(DATA_RAW, 'population', 'lad_demand2015.csv')
@@ -659,12 +757,23 @@ if __name__ == "__main__":
     print('Loading lad lookup')
     lad_lut = lad_lut(lads)
 
-    print('Loading postcode sector shapes')
-    path = os.path.join(DATA_RAW, 'shapes', 'PostalSector.shp')
-    postcode_sectors = read_postcode_sectors(path)
+    if not os.path.exists(os.path.join(directory, 'postcode_sectors.shp')):
 
-    print('Adding lad IDs to postcode sectors... might take a few minutes...')
-    postcode_sectors = add_lad_to_postcode_sector(postcode_sectors, lads)
+        print('Loading raw postcode sector shapes')
+        path = os.path.join(DATA_RAW, 'shapes', 'PostalSector.shp')
+        postcode_sectors = read_shapes(path)
+
+        print('Adding lad IDs to postcode sectors... might take a few minutes...')
+        postcode_sectors = add_lad_to_postcode_sector(postcode_sectors, lads)
+
+        print('Writing postcode sectors to shapefile')
+        write_shapefile(postcode_sectors, directory, 'postcode_sectors.shp', crs)
+
+    else:
+
+        print('Loading processed postcode sector shapes')
+        path = os.path.join(directory, 'postcode_sectors.shp')
+        postcode_sectors = read_shapes(path)
 
     print('Loading in population weights' )
     weights = load_in_weights()
@@ -677,16 +786,40 @@ if __name__ == "__main__":
 
     # print('Importing sitefinder data')
     # folder = os.path.join(DATA_RAW, 'sitefinder')
-    # sitefinder_data = import_sitefinder_data(os.path.join(folder, 'sitefinder.csv'))[:500]
+    # sitefinder_data = import_sitefinder_data(os.path.join(folder, 'sitefinder.csv'))[:200]
 
     # print('Preprocessing sitefinder data with 50m buffer')
     # sitefinder_data = process_asset_data(sitefinder_data)
 
+    # if not os.path.exists(os.path.join(directory, 'perimeter.shp')):
+
+    #     print('Generating perimeter')
+    #     perimeter = generate_perimeter(lads)
+
+    #     print('Writing perimeter to shapefile')
+    #     write_shapefile(perimeter, directory, 'perimeter.shp', crs)
+
+    # else:
+
+    #     print('Loading processed perimeter')
+    #     path = os.path.join(directory, 'perimeter.shp')
+    #     perimeter = read_shapes(path)
+
+    # print('Calculate population by site')
+    # voronoi_site_areas = generate_site_areas(sitefinder_data, perimeter)
+
+    # print('Writing processed sites to shapefile')
+    # write_shapefile(voronoi_site_areas, directory, 'site_areas.shp', crs)
+
     # print('Allocate 4G coverage to sites from postcode sectors')
     # processed_sites = add_coverage_to_sites(sitefinder_data, postcode_sectors)
 
-    # print('Reading exchanges')
-    # exchanges = read_exchanges()
+    # print('Calculate population by site')
+    # processed_sites = estimate_site_population(processed_sites, lads)
+
+
+    print('Reading exchanges')
+    exchanges = read_exchanges()
 
     # print('Generating straight line distance from each site to the nearest exchange')
     # processed_sites, backhaul_links = generate_link_straight_line(processed_sites, exchanges)
@@ -696,6 +829,9 @@ if __name__ == "__main__":
 
     print('Calculate population by exchange')
     exchange_areas = estimate_exchange_population(exchange_areas, lads)
+
+    print('Writing processed exchange areas to shapefile')
+    write_shapefile(exchange_areas, directory, 'exchange_areas.shp', crs)
 
     # print('Writing processed sites to shapefile')
     # write_shapefile(processed_sites, directory, 'processed_sites.shp', crs)
