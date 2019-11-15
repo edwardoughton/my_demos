@@ -55,13 +55,53 @@ def read_lads():
             ))]
 
 
+def load_population_data(path):
+    """
+    Load in LAD population data for 2015.
+
+    """
+    population_data = []
+
+    with open(path, 'r') as source:
+        reader = csv.DictReader(source)
+        for line in reader:
+            population_data.append({
+                'lad': line['lad17cd'],
+                'population': int(line['pop']),
+            })
+
+    return population_data
+
+
+def add_population_to_lads(lads, population_data):
+    """
+    Add the population data to lad shapes.
+
+    """
+    output = []
+
+    for item in population_data:
+        for lad in lads:
+            if item['lad'] == lad['properties']['name']:
+                output.append({
+                    'type': lad['type'],
+                    'geometry': lad['geometry'],
+                    'properties':{
+                        'id': lad['properties']['name'],
+                        'population': item['population'],
+                        },
+                })
+
+    return output
+
 def lad_lut(lads):
     """
     Yield lad IDs for use as a lookup.
 
     """
     for lad in lads:
-        yield lad['properties']['name']
+
+        yield lad['properties']['id']
 
 
 def read_postcode_sectors(path):
@@ -97,7 +137,8 @@ def add_lad_to_postcode_sector(postcode_sectors, lads):
                     'geometry': postcode_sector['geometry'],
                     'properties':{
                         'id': postcode_sector['properties']['RMSect'],
-                        'lad': n.object['properties']['name'],
+                        'lad': n.object['properties']['id'],
+                        'lad_population': n.object['properties']['population'],
                         'area': postcode_sector_shape.area,
                         },
                     })
@@ -138,17 +179,17 @@ def load_in_weights():
         DATA_RAW, 'pcd_sector_weights', 'population_weights.csv'
         )
 
-    population_data = []
+    output = []
 
     with open(path, 'r') as source:
         reader = csv.DictReader(source)
         for line in reader:
-                population_data.append({
+                output.append({
                     'id': line['postcode_sector'],
-                    'population': int(line['domestic_delivery_points']),
+                    'domestic_delivery_points': int(line['domestic_delivery_points']),
                 })
 
-    return population_data
+    return output
 
 
 def add_weights_to_postcode_sector(postcode_sectors, weights):
@@ -161,7 +202,14 @@ def add_weights_to_postcode_sector(postcode_sectors, weights):
     for postcode_sector in postcode_sectors:
         pcd_id = postcode_sector['properties']['id'].replace(' ', '')
         for weight in weights:
+
             weight_id = weight['id'].replace(' ', '')
+
+            weight = (
+                    weight['domestic_delivery_points'] /
+                    postcode_sector['properties']['lad_population']
+                )
+
             if pcd_id == weight_id:
                 output.append({
                     'type': postcode_sector['type'],
@@ -169,61 +217,17 @@ def add_weights_to_postcode_sector(postcode_sectors, weights):
                     'properties': {
                         'id': pcd_id,
                         'lad': postcode_sector['properties']['lad'],
-                        'population_weight': weight['population'],
-                        'area_km2': (postcode_sector['properties']['area'] / 1e6),
-                    }
-                })
-
-
-    return output
-
-
-def calculate_lad_population(postcode_sectors):
-    """
-
-    """
-    lad_ids = set()
-
-    for pcd_sector in postcode_sectors:
-        lad_ids.add(pcd_sector['properties']['lad'])
-
-    lad_population = []
-
-    for lad_id in lad_ids:
-        population = 0
-        for pcd_sector in postcode_sectors:
-            if pcd_sector['properties']['lad'] == lad_id:
-                population += pcd_sector['properties']['population_weight']
-        lad_population.append({
-            'lad': lad_id,
-            'population': population,
-        })
-
-    output = []
-
-    for pcd_sector in postcode_sectors:
-        for lad in lad_population:
-            if pcd_sector['properties']['lad'] == lad['lad']:
-
-                weight = (
-                    pcd_sector['properties']['population_weight'] /
-                    lad['population']
-                )
-
-                output.append({
-                    'type': pcd_sector['type'],
-                    'geometry': pcd_sector['geometry'],
-                    'properties': {
-                        'id': pcd_sector['properties']['id'],
-                        'lad': pcd_sector['properties']['lad'],
-                        'population': lad['population'] * weight,
+                        'lad_population': postcode_sector['properties']['lad_population'],
                         'weight': weight,
-                        'area_km2': pcd_sector['properties']['area_km2'],
-                        'pop_density_km2': (
-                            weight /
-                            (pcd_sector['properties']['area_km2'] / 1e6)
-                            ),
-                    },
+                        'population': round(
+                            postcode_sector['properties']['lad_population'] * weight
+                        ),
+                        'area_km2': (postcode_sector['properties']['area'] / 1e6),
+                        'pop_density_km2': round(
+                            (postcode_sector['properties']['lad_population'] * weight) /
+                            (postcode_sector['properties']['area'] / 1e6)
+                        )
+                    }
                 })
 
     return output
@@ -554,6 +558,35 @@ def generate_link_straight_line(origin_points, dest_points):
     return processed_sites, links
 
 
+def estimate_exchange_population(exchanges, lads):
+
+    idx = index.Index(
+        (i, Point(lad['geometry']['coordinates']).bounds, lad)
+        for i, lad in enumerate(lads)
+        )
+
+    output = []
+
+    for exchange in exchanges:
+        for n in idx.intersection(
+            (shape(exchange['geometry']).bounds), objects=True):
+            exchange_centroid = shape(exchange['geometry']).centroid
+            # exchange_shape = shape(exchange['geometry'])
+            lad_shape = shape(n.object['geometry'])
+            if exchange_centroid.intersects(lad_shape):
+                output.append({
+                    'type': exchange['type'],
+                    'geometry': exchange['geometry'],
+                    'properties':{
+                        'exchange_id': exchange['exchange_id'],
+                        'exchange_name': exchange['exchange_name'],
+                        'id': exchange['id'],
+                        },
+                    })
+
+    return output
+
+
 def write_shapefile(data, directory, filename, crs):
     """
     Write geojson data to shapefile.
@@ -614,7 +647,14 @@ if __name__ == "__main__":
     print('Output directory will be {}'.format(directory))
 
     print('Loading local authority district shapes')
-    lads = read_lads()[:20]
+    lads = read_lads()[:1]
+
+    print('Loading lad population data')
+    path = os.path.join(DATA_RAW, 'population', 'lad_demand2015.csv')
+    population_data = load_population_data(path)
+
+    print('Adding population to lads')
+    lads = add_population_to_lads(lads, population_data)
 
     print('Loading lad lookup')
     lad_lut = lad_lut(lads)
@@ -632,36 +672,36 @@ if __name__ == "__main__":
     print('Adding weights to postcode sectors')
     postcode_sectors = add_weights_to_postcode_sector(postcode_sectors, weights)
 
-    print('Calculating lad population weight for each postcode sector')
-    postcode_sectors = calculate_lad_population(postcode_sectors)
-
     print('Disaggregate 4G coverage to postcode sectors')
     postcode_sectors = allocate_4G_coverage(postcode_sectors, lad_lut)
 
-    print('Importing sitefinder data')
-    folder = os.path.join(DATA_RAW, 'sitefinder')
-    sitefinder_data = import_sitefinder_data(os.path.join(folder, 'sitefinder.csv'))[:500]
+    # print('Importing sitefinder data')
+    # folder = os.path.join(DATA_RAW, 'sitefinder')
+    # sitefinder_data = import_sitefinder_data(os.path.join(folder, 'sitefinder.csv'))[:500]
 
-    print('Preprocessing sitefinder data with 50m buffer')
-    sitefinder_data = process_asset_data(sitefinder_data)
+    # print('Preprocessing sitefinder data with 50m buffer')
+    # sitefinder_data = process_asset_data(sitefinder_data)
 
-    print('Allocate 4G coverage to sites from postcode sectors')
-    processed_sites = add_coverage_to_sites(sitefinder_data, postcode_sectors)
+    # print('Allocate 4G coverage to sites from postcode sectors')
+    # processed_sites = add_coverage_to_sites(sitefinder_data, postcode_sectors)
 
-    print('Reading exchanges')
-    exchanges = read_exchanges()
+    # print('Reading exchanges')
+    # exchanges = read_exchanges()
+
+    # print('Generating straight line distance from each site to the nearest exchange')
+    # processed_sites, backhaul_links = generate_link_straight_line(processed_sites, exchanges)
 
     print('Reading exchange areas')
     exchange_areas = read_exchange_areas()
 
-    print('Generating straight line distance from each site to the nearest exchange')
-    processed_sites, backhaul_links = generate_link_straight_line(processed_sites, exchanges)
+    print('Calculate population by exchange')
+    exchange_areas = estimate_exchange_population(exchange_areas, lads)
 
-    print('Writing processed sites to shapefile')
-    write_shapefile(processed_sites, directory, 'processed_sites.shp', crs)
+    # print('Writing processed sites to shapefile')
+    # write_shapefile(processed_sites, directory, 'processed_sites.shp', crs)
 
-    print('Writing backhaul links to shapefile')
-    write_shapefile(backhaul_links, directory, 'backhaul_links.shp', crs)
+    # print('Writing backhaul links to shapefile')
+    # write_shapefile(backhaul_links, directory, 'backhaul_links.shp', crs)
 
     end = time.time()
     print('time taken: {} minutes'.format(round((end - start) / 60,2)))
