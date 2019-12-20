@@ -4,19 +4,12 @@ Data demand estimation calculations
 Written by Ed Oughton
 December 12th 2019
 
+This method can be applied per asset area,
+using the gross population served by the
+asset.
+
 """
-
-#define parameters
-simulation_parameters = {
-    'monthly_data_consumption_GB': 3,
-    'busy_hour_traffic_percentage': 20,
-    'penetration_percentage': 80,
-    'market_share_percentage': 25,
-
-}
-
-
-def calculate_user_demand(simulation_parameters):
+def calculate_user_demand(parameters):
     """
     Calculate Mb/second from GB/month supplied by throughput scenario.
     E.g.
@@ -28,16 +21,16 @@ def calculate_user_demand(simulation_parameters):
             * 1/3600 converting hours to seconds,
         = ~0.01 Mbps required per user
     """
-    busy_hour_traffic = simulation_parameters['busy_hour_traffic_percentage'] / 100
+    busy_hour_traffic = parameters['busy_hour_traffic_percentage'] / 100
 
-    monthly_data = simulation_parameters['monthly_data_consumption_GB']
+    monthly_data = parameters['monthly_data_consumption_GB']
 
     user_demand = monthly_data * 1024 * 8 * busy_hour_traffic / 30 / 3600
 
     return user_demand
 
 
-def total_demand(user_demand, population, area, simulation_parameters):
+def total_demand(user_demand, population, area, parameters):
     """
     Estimate total demand based on:
         - population (raw number)
@@ -59,9 +52,9 @@ def total_demand(user_demand, population, area, simulation_parameters):
         = 0.2 Mbps/km² area demand
 
     """
-    penetration = simulation_parameters['penetration_percentage']
+    penetration = parameters['penetration_percentage']
 
-    market_share = simulation_parameters['market_share_percentage']
+    market_share = parameters['market_share_percentage']
 
     users = population * (penetration / 100) * market_share
 
@@ -74,8 +67,17 @@ def total_demand(user_demand, population, area, simulation_parameters):
 
 if __name__ == "__main__":
 
-    user_demand = calculate_user_demand(simulation_parameters)
+    #define parameters
+    PARAMETERS = {
+        'monthly_data_consumption_GB': 3,
+        'busy_hour_traffic_percentage': 20,
+        'penetration_percentage': 80,
+        'market_share_percentage': 25,
 
-    demand_km2 = total_demand(user_demand, 1000, 10, simulation_parameters)
+    }
+
+    user_demand = calculate_user_demand(PARAMETERS)
+
+    demand_km2 = total_demand(user_demand, 1000, 10, PARAMETERS)
 
     print(demand_km2)
