@@ -20,6 +20,7 @@ def calculate_user_demand(parameters):
             * 1/30 assuming 30 days per month
             * 1/3600 converting hours to seconds,
         = ~0.01 Mbps required per user
+
     """
     busy_hour_traffic = parameters['busy_hour_traffic_percentage'] / 100
 
