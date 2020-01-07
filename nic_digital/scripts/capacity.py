@@ -3,7 +3,7 @@ Capacity estimation method.
 
 Written by Ed Oughton
 
-December 12th 2020
+December 12th 2019
 
 This method can be used for any spatially aggregated unit, such as
 postcode sectors or local authority districts. First, a points in
