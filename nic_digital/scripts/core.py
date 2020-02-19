@@ -13,6 +13,7 @@ import time
 
 from shapely.geometry import shape, Point, LineString, mapping
 from shapely.ops import  cascaded_union
+import networkx as nx
 
 from rtree import index
 
@@ -134,7 +135,144 @@ def return_list(nodes, key, value):
     return output
 
 
-def connect(exchanges):
+def import_islands(path):
+    """
+    Load in lookup for islands.
+
+    """
+    output = []
+
+    with open(path, 'r') as source:
+        reader = csv.DictReader(source)
+        for item in reader:
+            output.append({
+                'OLO': item['olo'],
+                'island': item['island'],
+            })
+
+    return output
+
+
+def process_islands(exchanges, islands_lut):
+    """
+    Segment echanges into islands and then create a set of edges.
+
+    """
+    island_names = set()
+    for exchange in islands_lut:
+        island_names.add(exchange['island'])
+
+    all_island_exchanges = []
+    arran_set = set()
+    campbeltown_set = set()
+    islay_set = set()
+    mull_set = set()
+    orkney_set = set()
+    outer_heb_set = set()
+    shetland_set = set()
+    skye_set = set()
+
+    for island in island_names:
+        for exchange in islands_lut:
+            if island == exchange['island']:
+                all_island_exchanges.append(exchange['OLO'])
+                locals()['{}_set'.format(island)].add(exchange['OLO'])
+
+    arran = []
+    campbeltown = []
+    islay = []
+    mull = []
+    orkney = []
+    outer_heb = []
+    shetland = []
+    skye = []
+
+    island_exchanges = []
+    for island in island_names:
+        for exchange in exchanges:
+            if exchange['properties']['OLO'] in locals()['{}_set'.format(island)]:
+                exchange['properties']['island'] = island
+                locals()[island].append(exchange)
+
+    links = []
+    for island in list(island_names):
+
+        new_links = []
+
+        spanning_tree = design_network(locals()['{}'.format(island)])
+
+        for link in spanning_tree:
+            new_links.append({
+                'type': 'Feature',
+                'geometry': link['geometry'],
+                'properties': {
+                    'source': link['properties']['from'],
+                    'sink': link['properties']['to'],
+                    'population': 0,
+                    'level': 'unknown',
+                    'inner': 'unknown',
+                    'outer': 'unknown',
+                    'metro': 'unknown',
+                    'tier_1': 'unknown',
+                    'msan': 'unknown',
+                }
+            })
+
+        links = links + new_links
+
+    exchanges_minus_islands = []
+    island_exchanges = []
+
+    for exchange in exchanges:
+        if exchange['properties']['OLO'] not in list(all_island_exchanges):
+            exchanges_minus_islands.append(exchange)
+        if exchange['properties']['OLO'] in list(all_island_exchanges):
+            island_exchanges.append(exchange)
+
+    return exchanges_minus_islands, island_exchanges, links
+
+
+def design_network(nodes):
+
+    links = []
+
+    edges = []
+    for node1_id, node1 in enumerate(nodes):
+        for node2_id, node2 in enumerate(nodes):
+            if node1_id != node2_id:
+                geom1 = Point(node1['geometry']['coordinates'])
+                geom2 = Point(node2['geometry']['coordinates'])
+                line = LineString([geom1, geom2])
+                edges.append({
+                    'type': 'Feature',
+                    'geometry': mapping(line),
+                    'properties':{
+                        'from': node1['properties']['OLO'],
+                        'to':  node2['properties']['OLO'],
+                        'length': line.length,
+                    }
+                })
+
+    G = nx.Graph()
+
+    for node in nodes:
+        G.add_node(node['properties']['OLO'], object=node)
+
+    for edge in edges:
+        G.add_edge(edge['properties']['from'], edge['properties']['to'],
+            object=edge, weight=edge['properties']['length'])
+
+    tree = nx.minimum_spanning_edges(G)
+
+    for branch in tree:
+        link = branch[2]['object']
+        if link['properties']['length'] > 0:
+            links.append(link)
+
+    return links
+
+
+def connect(exchanges, islands, islands_lut):
     """
 
     """
@@ -403,7 +541,62 @@ def connect(exchanges):
                     }
                 })
 
-    return output
+    island_names = set()
+    for exchange in islands_lut:
+        island_names.add(exchange['island'])
+
+    island_edges = []
+
+    for island_name in list(island_names):
+        node_lut = []
+        for exchange in islands:
+            if exchange['properties']['island'] == island_name:
+                geom1 = shape(exchange['geometry'])
+
+                closest_node =  list(
+                    idx_tier_1.nearest(
+                        geom1.bounds,
+                        1, objects='raw')
+                        )[0]
+
+                geom2 = shape(closest_node['geometry'])
+
+                line = LineString([geom1, geom2])
+
+                node_lut.append({
+                    'OLO_island': exchange['properties']['OLO'],
+                    'OLO_island_geom': mapping(geom1),
+                    'OLO_mainland': closest_node['properties']['OLO'],
+                    'OLO_mainland_geom': mapping(geom2),
+                    'line': mapping(line),
+                    'length': line.length,
+                    'population': exchange['properties']['OLO'],
+                    'inner': exchange['properties']['inner'],
+                    'outer': exchange['properties']['outer'],
+                    'metro': exchange['properties']['metro'],
+                    'tier_1': exchange['properties']['tier_1'],
+                    'msan': exchange['properties']['msan'],
+                })
+
+        ranked = sorted(node_lut, reverse=False, key=lambda x: x['length'])[0]
+
+        island_edges.append({
+            'type': 'Feature',
+            'geometry': ranked['line'],
+            'properties': {
+                'source': ranked['OLO_island'],
+                'sink': ranked['OLO_mainland'],
+                'population': ranked['population'],
+                'level': 'island',
+                'inner': ranked['inner'],
+                'outer': ranked['outer'],
+                'metro': ranked['metro'],
+                'tier_1': ranked['tier_1'],
+                'msan': ranked['msan'],
+            }
+        })
+
+    return output + island_edges
 
 
 def write_shapefile(data, directory, filename, crs):
@@ -442,7 +635,7 @@ if __name__ == '__main__':
 
     path = os.path.join(BASE_PATH, 'telecoms_nodes.shp')
     exchanges = read_existing_nodes(path)#[:10]
-    print('total exchange is {}'.format(len(exchanges)))
+    print('total number of exchanges: {}'.format(len(exchanges)))
 
     path = os.path.join(BASE_PATH, 'core_bt_21cn.csv')
     lookup = read_lookup(path)
@@ -452,6 +645,11 @@ if __name__ == '__main__':
     crs = 'epsg:27700'
     write_shapefile(exchanges, DATA_INTERMEDIATE, 'nodes.shp', crs)
 
-    edges = connect(exchanges)
+    path = os.path.join(DATA_INTERMEDIATE, 'islands', 'all_islands.csv')
+    islands_lut = import_islands(path)
 
-    write_shapefile(edges, DATA_INTERMEDIATE, 'edges.shp', crs)
+    exchanges, islands, island_edges = process_islands(exchanges, islands_lut)
+
+    edges = connect(exchanges, islands, islands_lut)
+
+    write_shapefile(edges + island_edges, DATA_INTERMEDIATE, 'edges.shp', crs)
